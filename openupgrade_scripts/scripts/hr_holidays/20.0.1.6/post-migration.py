@@ -1,0 +1,102 @@
+# Copyright 2026 Baumgärtner Marketing GmbH
+# License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
+
+from openupgradelib import openupgrade
+
+# settings of hr.leave.type that exist with the same name and meaning on
+# hr.work.entry.type
+_copied_settings = [
+    "name",
+    "sequence",
+    "color",
+    "leave_validation_type",
+    "allocation_validation_type",
+    "requires_allocation",
+    "employee_requests",
+    "request_unit",
+    "unpaid",
+    "include_public_holidays_in_duration",
+    "leave_notif_subtype_id",
+    "allocation_notif_subtype_id",
+    "support_document",
+    "allow_request_on_top",
+    "elligible_for_accrual_rate",
+    "allows_negative",
+    "max_allowed_negative",
+    "create_calendar_meeting",
+    "hide_on_dashboard",
+]
+
+
+def hr_work_entry_type_defaults(env):
+    """
+    Set up the work entry types for time off the way an installation of
+    hr_holidays does. The module does that with functions and with records in
+    noupdate data, both are skipped when the module is updated.
+    """
+    openupgrade.load_data(env, "hr_holidays", "data/hr_work_entry_type_data.xml")
+    # the next steps write with queries: send the pending writes of the data
+    # file to the database first, otherwise they overwrite the queries later
+    env.flush_all()
+    env.invalidate_all()
+
+
+def hr_work_entry_type_settings(env):
+    """
+    Copy the settings of every time off type to the work entry type that takes
+    its place (see pre-migration). Allocations were counted in hours for types
+    requested by hour, in days for all others. An archived time off type is no
+    longer selectable for time off.
+    """
+    columns = [
+        column
+        for column in _copied_settings
+        if openupgrade.column_exists(env.cr, "hr_leave_type", column)
+    ]
+    assignments = ",\n            ".join(
+        f"{column} = hlt.{column}" for column in columns
+    )
+    openupgrade.logged_query(
+        env.cr,
+        f"""
+        UPDATE hr_work_entry_type wet
+        SET
+            {assignments},
+            unit_of_measure = CASE
+                WHEN hlt.request_unit = 'hour' THEN 'hour' ELSE 'day'
+            END,
+            time_off_selectable = COALESCE(hlt.active, TRUE)
+        FROM hr_leave_type hlt
+        WHERE hlt.work_entry_type_id = wet.id
+        """,
+    )
+
+
+def work_entry_type_id(env):
+    """
+    Fill the new required work_entry_type_id of time off, allocations and
+    accrual plans from the time off type they had
+    """
+    for table, column in (
+        ("hr_leave", "holiday_status_id"),
+        ("hr_leave_allocation", "holiday_status_id"),
+        ("hr_leave_accrual_plan", "time_off_type_id"),
+    ):
+        if not openupgrade.column_exists(env.cr, table, column):
+            continue
+        openupgrade.logged_query(
+            env.cr,
+            f"""
+            UPDATE {table} t
+            SET work_entry_type_id = hlt.work_entry_type_id
+            FROM hr_leave_type hlt
+            WHERE hlt.id = t.{column}
+            """,
+        )
+
+
+@openupgrade.migrate()
+def migrate(env, version):
+    hr_work_entry_type_defaults(env)
+    hr_work_entry_type_settings(env)
+    work_entry_type_id(env)

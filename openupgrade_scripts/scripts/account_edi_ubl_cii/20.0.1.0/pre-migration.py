@@ -1,0 +1,16 @@
+# Copyright 2026 Baumgärtner Marketing GmbH
+# License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
+
+from openupgradelib import openupgrade
+
+_renamed_fields = [
+    # Renaming keeps what has been entered. Otherwise Odoo computes both fields
+    # again for every partner and logs the "change" in the chatter.
+    ("res.partner", "res_partner", "peppol_eas", "routing_scheme"),
+    ("res.partner", "res_partner", "peppol_endpoint", "routing_endpoint"),
+]
+
+
+@openupgrade.migrate()
+def migrate(env, version):
+    openupgrade.rename_fields(env, _renamed_fields)

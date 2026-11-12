@@ -306,7 +306,27 @@ def ir_access(env):
         )
 
 
+def res_partner_is_company(env):
+    """
+    Put back res.partner#is_company as it was before the upgrade, see
+    pre-migration. From now on Odoo computes the field whenever the tax id or
+    the parent of a partner changes.
+    """
+    legacy = openupgrade.get_legacy_name("is_company")
+    if not openupgrade.column_exists(env.cr, "res_partner", legacy):
+        return
+    openupgrade.logged_query(
+        env.cr,
+        f"""
+        UPDATE res_partner
+        SET is_company = {legacy}
+        WHERE is_company IS DISTINCT FROM {legacy}
+        """,
+    )
+
+
 @openupgrade.migrate()
 def migrate(env, version):
     openupgrade.disable_invalid_filters(env)
     ir_access(env)
+    res_partner_is_company(env)

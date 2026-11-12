@@ -79,6 +79,32 @@ def ir_actions_client(env):
     )
 
 
+def ir_actions_server(env):
+    """
+    Precreate ir.actions.server#update_property. Otherwise Odoo computes it while
+    only base is loaded, and _compute_crud_relations fails with a KeyError for
+    every action that writes on a model of another module. v19 has no properties
+    in update_path, so NULL is the right value for all existing actions.
+    """
+    openupgrade.logged_query(
+        env.cr,
+        """
+        ALTER TABLE ir_act_server
+        ADD COLUMN IF NOT EXISTS update_property varchar
+        """,
+    )
+
+
+def res_partner_is_company(env):
+    """
+    res.partner#is_company is computed now: a partner is a company if it is its
+    own commercial entity and has a tax id. Everything that recomputes the
+    field during the upgrade changes what users had entered. Keep the values,
+    end-migration puts them back.
+    """
+    openupgrade.copy_columns(env.cr, {"res_partner": [("is_company", None, None)]})
+
+
 def res_company(env):
     """
     Map fonts in res.company#font
@@ -139,7 +165,9 @@ def migrate(env, version):
     openupgrade.rename_columns(env.cr, _renamed_columns)
     ir_model_access_ir_rule_xmlids(env)
     ir_actions_client(env)
+    ir_actions_server(env)
     res_company(env)
+    res_partner_is_company(env)
     res_device_log(env)
     openupgrade.set_xml_ids_noupdate_value(
         env, "base", ["module_category_administration"], True

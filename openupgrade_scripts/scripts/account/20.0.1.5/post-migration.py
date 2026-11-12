@@ -79,6 +79,17 @@ def account_move_line_deductible_percentage(env):
 
 @openupgrade.migrate()
 def migrate(env, version):
+    openupgrade.load_data(env, "account", "20.0.1.5/noupdate_changes.xml")
+    openupgrade.delete_record_translations(
+        env.cr,
+        "account",
+        [
+            "email_template_edi_invoice",
+            "email_template_edi_self_billing_invoice",
+            "mail_template_data_payment_receipt",
+        ],
+        ["body_html", "subject"],
+    )
     account_move_review_state(env)
     account_payment_state(env)
     account_move_line_deductible_percentage(env)

@@ -41,4 +41,5 @@ def account_analytic_line_billable_type(env):
 
 @openupgrade.migrate()
 def migrate(env, version):
+    openupgrade.load_data(env, "sale_timesheet", "20.0.1.0/noupdate_changes.xml")
     account_analytic_line_billable_type(env)

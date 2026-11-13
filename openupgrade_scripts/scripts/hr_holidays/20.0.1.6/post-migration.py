@@ -3,6 +3,8 @@
 
 from openupgradelib import openupgrade
 
+from odoo import Command
+
 # settings of hr.leave.type that exist with the same name and meaning on
 # hr.work.entry.type
 _copied_settings = [
@@ -95,8 +97,26 @@ def work_entry_type_id(env):
         )
 
 
+def res_groups_employee(env):
+    """
+    Until 19.0 every internal user could request time off and see the own
+    allocations: the access rights belonged to base.group_user. In 20.0 they
+    belong to the new group hr_holidays.group_hr_holidays_employee. Internal
+    users keep what they had; new users get the group by default as in a fresh
+    database (base.default_user_group is noupdate, the update of the module does
+    not touch it).
+    """
+    group = env.ref("hr_holidays.group_hr_holidays_employee")
+    users = (
+        env["res.users"].with_context(active_test=False).search([("share", "=", False)])
+    )
+    group.write({"user_ids": [Command.link(user.id) for user in users]})
+    env.ref("base.default_user_group").write({"implied_ids": [Command.link(group.id)]})
+
+
 @openupgrade.migrate()
 def migrate(env, version):
+    res_groups_employee(env)
     hr_work_entry_type_defaults(env)
     hr_work_entry_type_settings(env)
     work_entry_type_id(env)
